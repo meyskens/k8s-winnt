@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: winnt
+  labels:
+    app: winnt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: winnt
+  template:
+    metadata:
+      labels:
+        app: winnt
+    spec:
+      volumes:
+      - name: pv-storage
+        persistentVolumeClaim:
+          claimName: wintnt-pvc
+      containers:
+      - name: winnt
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "265Mi"
+            cpu: 1
+        securityContext:
+          privileged: true
+        image: maartje/vbox:winnt
+        imagePullPolicy: Always
+        command: 
+          - /bin/bash
+          - -c
+          - |
+            VBoxManage storageattach WinNT --storagectl "IDE Controller" --port 0 --device 0 --type hdd --medium /media/winnt.vdi
+            VBoxManage storageattach WinNT --storagectl "IDE Controller" --port 0 --device 1 --type dvddrive --medium /media/winnt.iso
+            # Forward RDP
+            VBoxManage modifyvm "WinNT" --natpf1 "rdp,tcp,,33890,,3389"
+            # Disable vbox's RDP
+            VBoxManage modifyvm WinNT --vrde off
+            # Start the VM
+            VBoxManage startvm WinNT --type headless
+            while [ "$(VBoxManage showvminfo WinNT | grep State | tr -s " " | cut -d " " -f 2)" == "running" ]
+            do
+                    sleep 10
+            done
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/bash","-c","VBoxManage controlvm WinNT poweroff"]
+        volumeMounts:
+          - mountPath: "/media/"
+            name: pv-storage
+        ports:
+          - containerPort: 3389
+            name: rdp
+          - containerPort: 33890
+            name: ntrdp
